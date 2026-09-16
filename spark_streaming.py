@@ -1,12 +1,14 @@
 from spark_init import get_spark_session
 from dotenv import load_dotenv
-import os
+import os,time
 from pyspark.sql.functions import (
     col,
     get_json_object,
     current_timestamp,
     to_timestamp,
-    expr
+    expr,
+    to_json,
+    struct
 )
 
 load_dotenv()
@@ -69,7 +71,6 @@ try:
 
     query1.lastProgress
 
-
 except Exception as e:
     print(f"failed to write topic orders with error : {e}")
 
@@ -116,7 +117,6 @@ query4 = (product_views.writeStream \
 
 print("views stream created")
 
-
 product_views = product_views.select(
     "customer_id",
     "product_id",
@@ -124,7 +124,7 @@ product_views = product_views.select(
 ).withWatermark(
     "event_time",
     "5 seconds"
-)
+).withColumn("event_time", col("event_time").cast("timestamp"))
 
 orders = orders.select(
     "customer_id",
@@ -133,7 +133,11 @@ orders = orders.select(
 ).withWatermark(
     "event_time",
     "5 seconds"
-)
+).withColumn("event_time", col("event_time").cast("timestamp"))
+
+
+# print(product_views.schema)
+# print(orders.schema)
 
 conversions  = product_views.alias("v").join(
     orders.alias("o"),
@@ -141,9 +145,31 @@ conversions  = product_views.alias("v").join(
         v.customer_id = o.customer_id
         AND v.product_id = o.product_id
         AND o.event_time >= v.event_time
-        AND o.event_time <= v.event_time + interval 90 seconds
+        AND o.event_time <= v.event_time + interval 30 seconds
     """)
+).select(
+    "o.customer_id",
+    "o.product_id",
+    "o.event_time"
 )
+
+conversions = conversions.select(
+    to_json(
+        struct(
+            "customer_id",
+            "product_id",
+            "event_time"
+        )
+    ).alias("value"),
+    to_json(
+        struct(
+            "customer_id"
+        )
+    ).alias("key"),
+)
+
+# print(conversions.schema)
+# time.sleep(100)
 
 query5 = (conversions.writeStream \
     .format("kafka") \
@@ -152,8 +178,6 @@ query5 = (conversions.writeStream \
     .option("checkpointLocation", "/tmp/conversions-checkpoint1") \
     .start()
 )
-
-import time
 
 while True:
     time.sleep(5)
@@ -168,6 +192,9 @@ while True:
         print("Input rate:", p["inputRowsPerSecond"])
         print("Processed rate:", p["processedRowsPerSecond"])
         print("Duration:", p["durationMs"])
+        # print(orders.head())
+        # print(product_views.head())
+
     else:
         print(f"No completed orders batch yet")
 

@@ -2,7 +2,7 @@ from kafka import KafkaConsumer, TopicPartition
 import json
 
 BOOTSTRAP_SERVERS = "localhost:9092"
-TOPIC = "orders"
+TOPIC = "conversions"
 
 consumer = KafkaConsumer(
     TOPIC,
