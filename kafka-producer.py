@@ -2,14 +2,19 @@ import asyncio
 import json
 import random
 import uuid
+import os
 
 from datetime import datetime, timezone, timedelta, date
 
 from kafka import KafkaProducer
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError, UnknownTopicOrPartitionError
+from dotenv import load_dotenv
 
+load_dotenv()
 
+createPoisonRecord=os.getenv("CREATEPOISONRECORD",False)
+print(f"createPoisonRecord:{createPoisonRecord}")
 # ============================================================
 # Configuration
 # ============================================================
@@ -317,6 +322,22 @@ def generate_journey():
 
     events.append(shipment)
 
+    if createPoisonRecord:
+        
+        poison = create_base_event(
+        "POISON_RECORD_CREATED",
+        base_time
+        )
+
+        poison.update({
+        "customer_id": "dummy",
+        "event_time":base_time.isoformat()
+        })
+
+        print("poison record created")
+
+        events.append(poison)
+
     return events
 
 async def generate_events(n=None, delay_ms=1000):
@@ -370,20 +391,22 @@ def run_events(n=None, delay_ms=1000):
             n=n,
             delay_ms=delay_ms
         )
-    )        
-
+    )   
 
 if __name__ == "__main__":
+    ...
 
+    create_topic("events", 3, 1)
     create_topic("events", 3, 1)
     create_topic("views", 3, 1)
     create_topic("orders", 3, 1)
     create_topic("payments", 3, 1)
     create_topic("shipments", 3, 1)
     create_topic("conversions", 3, 1)
+    create_topic("events_dlq", 3, 1)
 
 
     run_events(
         n=20,
         delay_ms=1000
-    )    
+    ) 

@@ -8,7 +8,8 @@ from pyspark.sql.functions import (
     to_timestamp,
     expr,
     to_json,
-    struct
+    struct,
+    lit
 )
 
 load_dotenv()
@@ -179,6 +180,59 @@ query5 = (conversions.writeStream \
     .start()
 )
 
+poison = events.filter(
+    col("event_type") == "POISON_RECORD_CREATED"
+).withColumn("topic",lit("events-dlq"))
+
+# query6 = (poison.writeStream
+#             .format("kafka") \
+#             .option("kafka.bootstrap.servers", "localhost:9092") \
+#             .option("topic", "conversions") \
+#             .option("checkpointLocation", "/tmp/conversions-checkpoint1") \
+#             .start()
+
+
+# )
+
+def process_microbatch(batch_df, batch_id):
+    # print(f"batchid {batch_id}")
+    poison_df = batch_df.filter(
+        col("event_type") == "POISON_RECORD_CREATED"
+    )
+    print(f"num poision {poison_df.count()}")
+    if poison_df.count()>0:
+        dlq_df = poison_df.select(
+            col("customer_id").cast("string").alias("key"),
+            to_json(
+                struct(
+                    col("event_type"),
+                    col("event_time"),
+                    col("customer_id"),
+                    col("processing_time"),
+                    col("topic"),
+                    col("partition"),
+                    col("offset")
+                )
+            ).alias("value")
+        )
+
+        print("poison record detected")
+        (
+            dlq_df
+            .write
+            .format("kafka")
+            .option("kafka.bootstrap.servers", "localhost:9092")
+            .option("topic", "events-dlq")
+            .save()
+        )
+
+
+query6 = (poison.writeStream
+          .foreachBatch(process_microbatch)
+          .option("checkpointLocation", "/tmp/poison-checkpoint1")
+          .start()
+)
+
 while True:
     time.sleep(5)
 
@@ -249,6 +303,20 @@ while True:
         print("Processed rate:", p["processedRowsPerSecond"])
         print("Duration:", p["durationMs"])
     else:
-        print(f"No completed conversions batch yet")                  
+        print(f"No completed conversions batch yet")     
+
+
+    print("\n========== POISONS ==========")
+    if query6.lastProgress:
+        p = query6.lastProgress
+        print("Batch ID:", p["batchId"])
+        print("Input rows:", p["numInputRows"])
+        print("Input rate:", p["inputRowsPerSecond"])
+        print("Processed rate:", p["processedRowsPerSecond"])
+        print("Duration:", p["durationMs"])
+    else:
+        print(f"No poison records in this batch")   
+
+                 
 
 # spark.streams.awaitAnyTermination(timeout=300)

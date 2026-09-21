@@ -2,7 +2,7 @@ from kafka import KafkaConsumer, TopicPartition
 import json
 
 BOOTSTRAP_SERVERS = "localhost:9092"
-TOPIC = "conversions"
+TOPIC = "events-dlq"
 
 consumer = KafkaConsumer(
     TOPIC,
@@ -23,6 +23,12 @@ print("Press Ctrl+C to stop.\n")
 
 try:
     for message in consumer:
+
+        # print("KEY TYPE:", type(message.key))
+        # print("KEY:", message.key)
+
+        # print("VALUE TYPE:", type(message.value))
+        # print("VALUE:", message.value)
 
         # print(
         #     f"partition={message.partition} "
