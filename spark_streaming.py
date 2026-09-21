@@ -121,19 +121,19 @@ product_views = product_views.select(
     "customer_id",
     "product_id",
     "event_time"
-).withWatermark(
+).withColumn("event_time", col("event_time").cast("timestamp")).withWatermark(
     "event_time",
     "5 seconds"
-).withColumn("event_time", col("event_time").cast("timestamp"))
+)
 
 orders = orders.select(
     "customer_id",
     "product_id",
     "event_time"
-).withWatermark(
+).withColumn("event_time", col("event_time").cast("timestamp")).withWatermark(
     "event_time",
     "5 seconds"
-).withColumn("event_time", col("event_time").cast("timestamp"))
+)
 
 
 # print(product_views.schema)
